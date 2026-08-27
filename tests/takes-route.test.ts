@@ -7,7 +7,7 @@ import { test } from "node:test";
 import {
   createTakesPost,
   loadProjectIngestTake,
-} from "../app/api/projects/[slug]/takes/route.ts";
+} from "../app/api/projects/[slug]/takes/post.ts";
 import { listTakes } from "../src/assembly.ts";
 import { SAMPLE_RATE, type Take } from "../src/edl.ts";
 import { getIngestJob, type IngestJob } from "../src/ingest-jobs.ts";

@@ -7,7 +7,7 @@ import { test } from "node:test";
 import {
   createCamsPost,
   loadProjectIngestCam,
-} from "../app/api/projects/[slug]/cams/route.ts";
+} from "../app/api/projects/[slug]/cams/post.ts";
 import { type Cam, listCams } from "../src/cams.ts";
 import { SAMPLE_RATE } from "../src/edl.ts";
 import { getIngestJob, type IngestJob } from "../src/ingest-jobs.ts";
