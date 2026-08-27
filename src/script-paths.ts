@@ -16,6 +16,20 @@ export function embedScriptPath(): string {
   return process.env.OPENKLIP_EMBED_SCRIPT_PATH || repoPath("src", "embed.mjs");
 }
 
+export function faceIndexWorkerPath(): string {
+  return (
+    process.env.OPENKLIP_FACE_INDEX_SCRIPT_PATH ||
+    repoPath("src", "face-index-worker.mjs")
+  );
+}
+
+export function mediaSceneEmbedScriptPath(): string {
+  return (
+    process.env.OPENKLIP_MEDIA_SCENE_EMBED_SCRIPT_PATH ||
+    repoPath("src", "media-scene-embed.mjs")
+  );
+}
+
 export function graphicRuntimeEntryPath(): string {
   return repoPath("src", "graphic-runtime-entry.ts");
 }

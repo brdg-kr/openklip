@@ -5,7 +5,7 @@ import type { RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
  * mutation surface so UI, CLI, and MCP stay in sync via src/agent-tools.ts.
  *
  * Connect-time surface is deferred by default (CRAFT-6169): only a core tool
- * set is enabled so hosts pay ~schema tokens for the edit loop, not all ~98
+ * set is enabled so hosts pay ~schema tokens for the edit loop, not all ~100
  * tools. Discover deferred tools with tools_catalog, enable them with
  * tools_load, or call any tool by name with tools_invoke.
  * OPENKLIP_MCP_SURFACE=all enables every tool at connect (in-app edit agent).
@@ -243,6 +243,11 @@ export function createOpenKlipMcpServer(
 }
 
 export async function startMcpServer(): Promise<void> {
+  // Stdio MCP owns stdout for JSON-RPC messages. Existing ingest/export paths
+  // use console.log for human CLI progress, so redirect those progress lines
+  // to stderr only in the standalone MCP process.
+  console.log = (...args: unknown[]) => console.error(...args);
+  console.info = (...args: unknown[]) => console.error(...args);
   logger.info({ surface: "mcp" }, "openklip mcp server starting");
   const { server } = createOpenKlipMcpServer();
   const transport = new StdioServerTransport();

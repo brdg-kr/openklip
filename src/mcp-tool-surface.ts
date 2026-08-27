@@ -2,7 +2,7 @@
  * Deferred MCP tool surface (CRAFT-6169).
  *
  * Default: only a small core set is enabled at connect so hosts pay schema
- * tokens for the common edit loop, not all ~98 tools. Agents discover the
+ * tokens for the common edit loop, not all ~100 tools. Agents discover the
  * rest via tools_catalog, enable them with tools_load (list_changed), or
  * call any tool by name with tools_invoke.
  *
@@ -15,6 +15,14 @@ export type McpSurfaceMode = "core" | "all";
 /** Always enabled at connect in "core" mode (plus meta tools). */
 export const MCP_CORE_TOOL_NAMES = [
   "list_projects",
+  "url_ingest",
+  "ingest_job_status",
+  "member_profile_create",
+  "member_profile_list",
+  "media_index_rebuild",
+  "media_index_status",
+  "member_appearance_search",
+  "moment_search",
   "project_status",
   "project_overlays",
   "project_ranges",
@@ -133,7 +141,17 @@ export const MCP_TOOL_GROUPS: Record<string, readonly string[]> = {
     "highlights_detect",
     "verify",
   ],
-  search: ["moment_search", "scene_log", "broll_suggest"],
+  search: [
+    "moment_search",
+    "member_appearance_search",
+    "media_index_rebuild",
+    "media_index_status",
+    "media_index_cancel",
+    "member_profile_create",
+    "member_profile_list",
+    "scene_log",
+    "broll_suggest",
+  ],
 };
 
 export const MCP_META_TOOL_NAMES = [

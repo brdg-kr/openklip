@@ -130,6 +130,27 @@ const RAW_FEATURES: FeatureDef[] = [
     },
   },
   {
+    id: "member-media-index",
+    title: "Target member media index",
+    description:
+      "Reusable YuNet and SFace member-appearance timelines plus Korean-first, bounded bilingual SigLIP2 scene search, completed inside the MCP URL-ingest job.",
+    group: "editing",
+    status: "shipped",
+    surfaces: ["mcp"],
+    links: {
+      templates: ["target-moment-search"],
+      tools: [
+        "member_profile_create",
+        "member_profile_list",
+        "media_index_rebuild",
+        "media_index_status",
+        "media_index_cancel",
+        "member_appearance_search",
+        "moment_search",
+      ],
+    },
+  },
+  {
     id: "cleanup-review",
     title: "Cleanup review",
     description:
@@ -652,12 +673,13 @@ const RAW_FEATURES: FeatureDef[] = [
   },
   {
     id: "browser-project-creation",
-    title: "Browser project creation",
+    title: "Project creation",
     description:
-      "Upload, import folder, import from URL, or drop files on the empty workspace.",
+      "Upload, import folder, import from URL, drop files, or let an Agent create a URL project.",
     group: "surfaces",
     status: "shipped",
-    surfaces: ["gui"],
+    surfaces: ["gui", "mcp"],
+    links: { tools: ["url_ingest", "ingest_job_status", "list_projects"] },
     requires: { bins: ["yt-dlp"] },
   },
   {

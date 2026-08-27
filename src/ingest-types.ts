@@ -4,6 +4,7 @@ export type IngestPhase =
   | "audio"
   | "frames"
   | "index"
+  | "media-index"
   | "transcribe"
   | "finalize"
   | "done";

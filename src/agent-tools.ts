@@ -34,7 +34,7 @@ import { planTimelineSummary } from "./cam-mix.ts";
 import { camMixOrRemix, camRemix } from "./cam-remix.ts";
 import { type CamRole, ingestCam, listCams, setCam } from "./cams.ts";
 import { buildCleanupReport } from "./cleanup.ts";
-import { executeMomentSearch } from "./cli-query.ts";
+import { executeMomentSearch, grepMomentTextMatches } from "./cli-query.ts";
 import { transitionExportPreview } from "./cut-transition-gate.ts";
 import { runDoctor } from "./doctor.ts";
 import { PhraseAnchorSchema, type Project, samplesToSec } from "./edl.ts";
@@ -57,6 +57,17 @@ import { exportAllHighlights, exportHighlight } from "./highlight-export.ts";
 import { detectHighlights, highlightClipLines } from "./highlights.ts";
 import { listLuts } from "./lut.ts";
 import { MAX_SEARCH_LIMIT } from "./moment-search.ts";
+import {
+  cancelMediaIndexBuild,
+  memberAppearanceTracks,
+  readMediaIndexStatus,
+  searchMediaIndex,
+  startMediaIndexBuild,
+} from "./media-index.ts";
+import {
+  createMemberProfileFromSources,
+  listMemberProfiles,
+} from "./member-profiles.ts";
 import { projectPaths } from "./paths.ts";
 import { auditProjectForShip } from "./project-brief-audit.ts";
 import {
@@ -88,6 +99,7 @@ import {
   listTemplates,
   loadTemplateSkill,
 } from "./templates.ts";
+import { startProjectFromUrl, urlProjectJobStatus } from "./url-project.ts";
 import { verifyCut, verifyVerdict } from "./verify.ts";
 
 const slug = z.string().min(1).describe("Project slug under projects/");
@@ -302,6 +314,190 @@ const queryTools: AgentToolDef[] = [
         })),
       };
     },
+  }),
+  defineQueryTool({
+    name: "url_ingest",
+    summary:
+      "Start an OpenKlip URL project as a background ingest job and return its job id immediately.",
+    schema: z.object({
+      url: z.string().min(1).describe("Video URL to download and ingest."),
+      projectSlug: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "Optional project slug. YouTube URLs otherwise use youtube-<video-id>."
+        ),
+      force: z
+        .boolean()
+        .optional()
+        .describe("Replace an existing project with the same slug."),
+      memberProfileId: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "Optional target member profile. URL ingest starts the reusable face and scene media index after project creation."
+        ),
+    }),
+    run: ({ url, projectSlug, force, memberProfileId }) =>
+      startProjectFromUrl({
+        url,
+        projectSlug,
+        force,
+        memberProfileId,
+      }),
+  }),
+  defineQueryTool({
+    name: "ingest_job_status",
+    summary:
+      "Read one URL/project ingest job status, progress, warning, or error by job id.",
+    schema: z.object({
+      jobId: z.string().min(1).describe("Job id returned by url_ingest."),
+    }),
+    run: ({ jobId }) => {
+      const job = urlProjectJobStatus(jobId);
+      if (!job) {
+        throw new Error(`ingest job not found: ${jobId}`);
+      }
+      return {
+        id: job.id,
+        slug: job.slug,
+        status: job.status,
+        progress: job.progress ?? null,
+        warning: job.warning ?? null,
+        error: job.error ?? null,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+      };
+    },
+  }),
+  defineQueryTool({
+    name: "member_profile_create",
+    summary:
+      "Create or replace one reusable target-member face profile from 3-40 verified local image paths or public HTTPS image URLs.",
+    schema: z
+      .object({
+        id: z.string().min(1).max(200),
+        displayName: z.string().min(1).max(200),
+        groupId: z.string().min(1).max(200).optional(),
+        referenceImagePaths: z.array(z.string().min(1)).max(40).optional(),
+        referenceImageUrls: z.array(z.string().url()).max(40).optional(),
+        negativeReferenceImagePaths: z
+          .array(z.string().min(1))
+          .max(40)
+          .optional(),
+        negativeReferenceImageUrls: z
+          .array(z.string().url())
+          .max(40)
+          .optional(),
+        force: z.boolean().optional(),
+      })
+      .refine(
+        (input) =>
+          (input.referenceImagePaths?.length ?? 0) +
+            (input.referenceImageUrls?.length ?? 0) >=
+          3,
+        {
+          message: "At least three reference image paths or URLs are required.",
+        }
+      ),
+    run: async ({
+      id,
+      displayName,
+      groupId,
+      referenceImagePaths,
+      referenceImageUrls,
+      negativeReferenceImagePaths,
+      negativeReferenceImageUrls,
+      force,
+    }) => {
+      const profile = await createMemberProfileFromSources(
+        {
+          id,
+          displayName,
+          groupId,
+          referenceImagePaths,
+          referenceImageUrls,
+          negativeReferenceImagePaths,
+          negativeReferenceImageUrls,
+        },
+        { force }
+      );
+      return {
+        id: profile.id,
+        displayName: profile.displayName,
+        groupId: profile.groupId ?? null,
+        referenceCount: profile.references.length,
+        model: profile.model,
+        calibration: profile.calibration,
+        createdAt: profile.createdAt,
+      };
+    },
+  }),
+  defineQueryTool({
+    name: "member_profile_list",
+    summary: "List reusable target-member face profiles available to ingest.",
+    schema: z.object({}),
+    run: () => ({
+      profiles: listMemberProfiles().map((profile) => ({
+        id: profile.id,
+        displayName: profile.displayName,
+        groupId: profile.groupId ?? null,
+        referenceCount: profile.references.length,
+        model: profile.model,
+        calibration: profile.calibration,
+        createdAt: profile.createdAt,
+      })),
+    }),
+  }),
+  defineQueryTool({
+    name: "media_index_rebuild",
+    summary:
+      "Start a background high-accuracy face and SigLIP2 scene index build for one project.",
+    schema: z.object({
+      slug,
+      memberProfileId: z.string().min(1).optional(),
+    }),
+    run: ({ slug: projectSlug, memberProfileId }) =>
+      startMediaIndexBuild({ slug: projectSlug, memberProfileId }),
+  }),
+  defineQueryTool({
+    name: "media_index_status",
+    summary:
+      "Read face and scene media-index progress, models, counts, or terminal error for one project.",
+    schema: z.object({ slug }),
+    run: ({ slug: projectSlug }) => ({
+      status: readMediaIndexStatus(projectSlug),
+    }),
+  }),
+  defineQueryTool({
+    name: "media_index_cancel",
+    summary: "Cancel the live media-index build for one project.",
+    schema: z.object({ slug }),
+    run: ({ slug: projectSlug }) => ({
+      cancelled: cancelMediaIndexBuild(projectSlug),
+      slug: projectSlug,
+    }),
+  }),
+  defineQueryTool({
+    name: "member_appearance_search",
+    summary:
+      "List indexed source-time intervals where one target member appears.",
+    schema: z.object({
+      slug,
+      memberProfileId: z.string().min(1),
+      includeAmbiguous: z.boolean().optional(),
+    }),
+    run: ({ slug: projectSlug, memberProfileId, includeAmbiguous }) => ({
+      slug: projectSlug,
+      memberProfileId,
+      appearances: memberAppearanceTracks(
+        projectSlug,
+        memberProfileId,
+        includeAmbiguous
+      ),
+    }),
   }),
   defineQueryTool({
     name: "blank_ingest",
@@ -704,15 +900,74 @@ const queryTools: AgentToolDef[] = [
   defineQueryTool({
     name: "moment_search",
     summary:
-      "Search transcript text and visual scenes in one call (CLIP frame embeddings blended with scene-log summaries). The first call may block while the visual index builds if it is missing or stale.",
+      "Search transcript text and visual scenes. With memberProfileId, also intersect the reusable target-member face timeline with the SigLIP2 scene index.",
     schema: z.object({
       slug,
-      query: z.string().min(1),
+      query: z.string().min(1).max(500),
+      queryVariants: z
+        .array(z.string().min(1).max(500))
+        .max(2)
+        .optional()
+        .describe(
+          "Optional faithful English and visible-attribute variants. Together with query, at most three scene embeddings are fused."
+        ),
       limit: z.number().int().min(1).max(MAX_SEARCH_LIMIT).optional(),
+      memberProfileId: z.string().min(1).optional(),
     }),
-    run: async ({ slug: projectSlug, query, limit }) => {
+    run: async ({
+      slug: projectSlug,
+      query,
+      queryVariants,
+      limit,
+      memberProfileId,
+    }) => {
       const project = await loadProject(projectSlug);
-      return executeMomentSearch(projectSlug, project, query, { limit });
+      let base: Awaited<ReturnType<typeof executeMomentSearch>>;
+      if (memberProfileId) {
+        base = {
+          indexed: readMediaIndexStatus(projectSlug)?.status === "done",
+          query,
+          text: grepMomentTextMatches(project, query),
+          scenes: [],
+        };
+      } else {
+        try {
+          base = await executeMomentSearch(projectSlug, project, query, {
+            limit,
+          });
+        } catch (error) {
+          base = {
+            indexed: false,
+            query,
+            error:
+              error instanceof Error
+                ? error.message
+                : "legacy moment search failed",
+            text: grepMomentTextMatches(project, query),
+            scenes: [],
+          };
+        }
+      }
+      if (!memberProfileId) {
+        return base;
+      }
+      const [memberScenes, appearances] = await Promise.all([
+        searchMediaIndex(projectSlug, [query, ...(queryVariants ?? [])], {
+          limit,
+          memberProfileId,
+        }),
+        Promise.resolve(
+          memberAppearanceTracks(projectSlug, memberProfileId, true)
+        ),
+      ]);
+      return {
+        ...base,
+        memberProfileId,
+        queries: [query, ...(queryVariants ?? [])],
+        memberScenes,
+        appearances,
+        mediaIndexStatus: readMediaIndexStatus(projectSlug),
+      };
     },
   }),
   defineQueryTool({

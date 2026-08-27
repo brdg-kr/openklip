@@ -13,7 +13,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { ingest } from "./ingest.ts";
-import { isIngestPersistError } from "./ingest-persist-error.ts";
+import { isIngestPartialError } from "./ingest-persist-error.ts";
 import type { IngestProgress } from "./ingest-types.ts";
 import {
   deleteJobRecord,
@@ -269,7 +269,7 @@ function attachRunLifecycle(
         persist(job);
       },
       (e: unknown) => {
-        if (isIngestPersistError(e)) {
+        if (isIngestPartialError(e)) {
           job.slug = e.slug;
           job.status = "partial";
           job.warning = e.message;

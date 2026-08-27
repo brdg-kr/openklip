@@ -17,6 +17,13 @@ function writeDerivedFixtures(slug: string): void {
   writeFileSync(join(p.frames, "0001.jpg"), "fake-frame-bytes");
   writeFileSync(p.audioRaw, "fake-pcm-bytes");
   writeFileSync(p.momentIndex, JSON.stringify({ frames: [] }));
+  writeFileSync(p.mediaIndex, "fake-sqlite-bytes");
+  writeFileSync(
+    p.mediaIndexStatus,
+    JSON.stringify({ version: 1, status: "done" })
+  );
+  mkdirSync(p.mediaSceneFrames, { recursive: true });
+  writeFileSync(join(p.mediaSceneFrames, "0000001.jpg"), "scene-frame");
   writeFileSync(p.transcript, JSON.stringify({ words: [] }));
   writeFileSync(join(p.working, "audio-analysis.json"), JSON.stringify({}));
   mkdirSync(p.output, { recursive: true });
@@ -44,6 +51,9 @@ describe("compactProject", () => {
       expect(existsSync(p.audioRaw)).toBe(false);
       expect(existsSync(p.frames)).toBe(false);
       expect(existsSync(p.momentIndex)).toBe(false);
+      expect(existsSync(p.mediaIndex)).toBe(false);
+      expect(existsSync(p.mediaSceneFrames)).toBe(false);
+      expect(existsSync(p.mediaIndexStatus)).toBe(true);
       expect(existsSync(p.transcript)).toBe(false);
       expect(existsSync(join(p.working, "audio-analysis.json"))).toBe(false);
       expect(existsSync(p.output)).toBe(false);

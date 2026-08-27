@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mock, test } from "bun:test";
+import { withTempProjectsRoot } from "./helpers/projectFixture.ts";
 
 const realUrlIngest = await import("../src/url-ingest.ts");
 
@@ -29,21 +30,23 @@ function urlRequest(url: string) {
 }
 
 test("POST /api/projects/url returns a safe JSON error when yt-dlp fails", async () => {
-  const tempRoot = await mkdtemp(join(tmpdir(), "openklip-url-route-test-"));
-  try {
-    const post = createUrlProjectsPost({
-      loadIngest: () => Promise.reject(new Error("ingest must not start")),
-      tempRoot,
-    });
+  await withTempProjectsRoot(async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "openklip-url-route-test-"));
+    try {
+      const post = createUrlProjectsPost({
+        loadIngest: () => Promise.reject(new Error("ingest must not start")),
+        tempRoot,
+      });
 
-    const response = await post(urlRequest("https://youtu.be/example"));
-    assert.equal(response.status, 502);
-    assert.match(response.headers.get("content-type") ?? "", /json/i);
+      const response = await post(urlRequest("https://youtu.be/example"));
+      assert.equal(response.status, 502);
+      assert.match(response.headers.get("content-type") ?? "", /json/i);
 
-    const json = (await response.json()) as { error?: string };
-    assert.match(json.error ?? "", /HTTP 403/i);
-    assert.doesNotMatch(json.error ?? "", /media\.example|sig=/i);
-  } finally {
-    await rm(tempRoot, { force: true, recursive: true });
-  }
+      const json = (await response.json()) as { error?: string };
+      assert.match(json.error ?? "", /HTTP 403/i);
+      assert.doesNotMatch(json.error ?? "", /media\.example|sig=/i);
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
 });

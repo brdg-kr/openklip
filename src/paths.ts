@@ -1,5 +1,7 @@
 import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 import { basename, extname, join, resolve } from "node:path";
+import { stateDir } from "./repo-paths.ts";
 import { readConfiguredProjectsRoot } from "./workspace-config.ts";
 
 // Parent directory containing project folders (each subdir with project.json).
@@ -71,6 +73,22 @@ export function ingestJobsStorePath(): string {
   return join(jobsStoreDir(), "ingest-jobs.json");
 }
 
+export function memberProfilesRoot(): string {
+  return stateDir("member-profiles");
+}
+
+export function memberProfileDir(memberProfileId: string): string {
+  const normalized = memberProfileId.trim();
+  if (!normalized || normalized.length > 200) {
+    throw new Error("member profile id must be 1-200 characters");
+  }
+  const key = createHash("sha256")
+    .update(normalized)
+    .digest("hex")
+    .slice(0, 24);
+  return join(memberProfilesRoot(), key);
+}
+
 // Layered project layout. `project.json` (the edit) stays at the project root;
 // user originals live in assets/; everything derived lives under working/
 // (proxy, transcript, audio, frames, asset proxies) and rendered output under
@@ -101,6 +119,10 @@ export function projectPaths(slug: string) {
      * derived from frames/ (see src/moment-search.ts). Rebuildable cache,
      * never hand-edited. */
     momentIndex: join(working, "moment-index.json"),
+    mediaIndex: join(working, "media-index.json"),
+    mediaIndexStatus: join(working, "media-index-status.json"),
+    mediaFaceFrames: join(working, "media-index-face-frames"),
+    mediaSceneFrames: join(working, "media-index-scene-frames"),
     /** User drop folder : originals only. */
     assets: join(dir, "assets"),
     /** Generated asset proxies (ffmpeg output). */

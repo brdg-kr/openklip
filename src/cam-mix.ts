@@ -24,6 +24,7 @@ import { listCams } from "./cams.ts";
 import { type Project, ProjectSchema, SAMPLE_RATE, type Word } from "./edl.ts";
 import { FFMPEG, probe, run } from "./ffmpeg.ts";
 import { buildProxy, extractAudio, transcribeToWords } from "./ingest.ts";
+import { invalidateMediaIndex } from "./media-index-storage.ts";
 import { camDir, projectPaths } from "./paths.ts";
 import { mutateProject } from "./projectStore.ts";
 import { defaultTemplateId } from "./templates.ts";
@@ -695,6 +696,7 @@ export async function camMix(
     await Bun.write(paths.project, JSON.stringify(project, null, 2));
   }
   await Bun.write(paths.transcript, JSON.stringify({ words }, null, 2));
+  await invalidateMediaIndex(slug);
 
   return {
     slug,

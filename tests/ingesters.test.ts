@@ -27,7 +27,7 @@ test("loadIngesters discovers bundled manifests", async () => {
   assert.ok(list.some((m) => m.id === "url"));
 });
 
-test("bundled URL ingester uses the web embedded YouTube client", async () => {
+test("bundled URL ingester uses the Node JavaScript runtime without forcing an embedded client", async () => {
   const list = await loadIngesters();
   const manifest = list.find((entry) => entry.id === "url");
   assert.ok(manifest);
@@ -39,8 +39,8 @@ test("bundled URL ingester uses the web embedded YouTube client", async () => {
   );
   assert.deepEqual(argv, [
     "yt-dlp",
-    "--extractor-args",
-    "youtube:player_client=web_embedded",
+    "--js-runtimes",
+    "node",
     "https://youtu.be/example",
     "-o",
     "/tmp/out.mp4",

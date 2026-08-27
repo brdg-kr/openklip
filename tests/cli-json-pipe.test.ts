@@ -46,8 +46,8 @@ test("tools --json pipes intact (exceeds 64KB buffer)", async () => {
   // Verify we got all tools (this would be truncated if piped incorrectly)
   assert.equal(
     toolsArray.length,
-    98,
-    `tools array should have 98 entries (got ${toolsArray.length})`
+    106,
+    `tools array should have 106 entries (got ${toolsArray.length})`
   );
 
   // Verify the last tool entry is present and well-formed (proves nothing was truncated)
@@ -146,5 +146,5 @@ test("tools --json through intermediate parser (like jq)", async () => {
   }
 
   assert.ok(Array.isArray(parsed), "result should be an array");
-  assert.equal((parsed as unknown[]).length, 98, "should have 98 items");
+  assert.equal((parsed as unknown[]).length, 106, "should have 106 items");
 });

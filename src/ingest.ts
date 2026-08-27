@@ -7,7 +7,7 @@ import { assertProjectCanBeIngested } from "./ingest-guard.ts";
 import { forceIngestWithSwap } from "./ingest-swap.ts";
 import type { IngestPhase, IngestProgress } from "./ingest-types.ts";
 import { buildMomentIndex } from "./moment-search.ts";
-import { projectPaths, slugFromVideo } from "./paths.ts";
+import { assertValidSlug, projectPaths, slugFromVideo } from "./paths.ts";
 import { cwdPath } from "./repo-paths.ts";
 import { transcribeScriptPath } from "./script-paths.ts";
 import { defaultTemplateId } from "./templates.ts";
@@ -398,6 +398,8 @@ export async function runTakeMediaPhases(opts: {
 
 export interface IngestOpts {
   force?: boolean;
+  /** Optional caller-selected project slug, used by URL and Agent intake. */
+  slug?: string;
   /**
    * Test-only override for the media pipeline (proxy/audio/frames/index/
    * transcribe). Production callers never pass this; it exists so tests can
@@ -508,7 +510,7 @@ export async function ingest(
     throw new Error(`video not found: ${source}`);
   }
 
-  const slug = slugFromVideo(source);
+  const slug = opts?.slug ? assertValidSlug(opts.slug) : slugFromVideo(source);
   // Re-ingesting a slug wipes the whole project dir. Refuse unless the caller
   // explicitly opts in with --force, so an accidental re-upload can't destroy
   // an existing edit.

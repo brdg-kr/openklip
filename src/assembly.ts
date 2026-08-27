@@ -23,6 +23,7 @@ import { FFMPEG, probe, run } from "./ffmpeg.ts";
 import { extractAudio, runTakeMediaPhases } from "./ingest.ts";
 import { assertProjectCanBeIngested } from "./ingest-guard.ts";
 import type { IngestPhase, IngestProgress } from "./ingest-types.ts";
+import { invalidateMediaIndex } from "./media-index-storage.ts";
 import { projectPaths, slugify, takeDir, takeFile } from "./paths.ts";
 import { mutateProject } from "./projectStore.ts";
 import { cwdPath } from "./repo-paths.ts";
@@ -361,6 +362,7 @@ export async function assembleFromSelection(
     }
   );
   await Bun.write(p.transcript, JSON.stringify({ words: plan.words }, null, 2));
+  await invalidateMediaIndex(slug);
 
   return {
     slug,

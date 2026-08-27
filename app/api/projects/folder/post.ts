@@ -11,6 +11,7 @@ import {
 } from "@engine/ingest-jobs";
 import { IngestPersistError } from "@engine/ingest-persist-error";
 import { projectPaths, slugFromVideo } from "@engine/paths";
+import { persistProjectSource } from "@engine/project-source";
 import {
   MAX_ASSET_UPLOAD_BYTES,
   MAX_PROJECT_UPLOAD_BYTES,
@@ -19,7 +20,6 @@ import {
 import { writeUploadToFile } from "@engine/upload-stream";
 import type { NextRequest } from "next/server";
 import type { IngestFn } from "../post.ts";
-import { persistUploadedSource } from "../post.ts";
 
 export interface FolderProjectsPostDeps {
   loadIngest: () => Promise<IngestFn>;
@@ -140,7 +140,7 @@ export function createFolderProjectsPost({
               signal,
             });
             try {
-              await persistUploadedSource(createdSlug, filename, tmpPrimary);
+              await persistProjectSource(createdSlug, filename, tmpPrimary);
             } catch (persistError) {
               throw new IngestPersistError(createdSlug, persistError);
             }

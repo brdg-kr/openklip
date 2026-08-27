@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -10,7 +10,7 @@ import {
 import { IngestPersistError } from "@engine/ingest-persist-error";
 import type { IngestProgress } from "@engine/ingest-types";
 import { projectPaths, slugFromVideo } from "@engine/paths";
-import { withProjectLock } from "@engine/project-lock";
+import { persistProjectSource } from "@engine/project-source";
 import {
   MAX_PROJECT_UPLOAD_BYTES,
   uploadTooLargeMessage,
@@ -28,6 +28,7 @@ export type IngestFn = (
     force?: boolean;
     onProgress?: (p: IngestProgress) => void;
     signal?: AbortSignal;
+    slug?: string;
   }
 ) => Promise<string>;
 
@@ -39,34 +40,6 @@ export interface ProjectsPostDeps {
 export async function loadProjectIngest(): Promise<IngestFn> {
   const { ingest } = await import("@engine/ingest");
   return ingest;
-}
-
-// The temp upload dir is deleted once ingest settles, but project.json
-// `source` must keep pointing at a real absolute file: the exporter renders
-// full-res from source and silently degrades to the 720p proxy when it is
-// gone (src/exporter.ts, src/doctor.ts). Persist the upload at the project
-// root next to project.json (NOT assets/, which folder-sync would register
-// as b-roll) and repoint source at that absolute path.
-export async function persistUploadedSource(
-  slug: string,
-  filename: string,
-  tmpPath: string
-): Promise<void> {
-  const paths = projectPaths(slug);
-  const storedSource = join(paths.dir, filename);
-  await copyFile(tmpPath, storedSource);
-  // Serialize under the same per-slug lock mutateProject uses: in the ?force=1
-  // overwrite path the editor may already be autosaving this slug, and an
-  // unlocked read-patch-write could drop that concurrent edit. mutateProject
-  // itself is deliberately not used; this internal repoint must not bump the
-  // revision or add a history entry.
-  await withProjectLock(slug, async () => {
-    const project = JSON.parse(await readFile(paths.project, "utf8")) as {
-      source?: string;
-    };
-    project.source = storedSource;
-    await writeFile(paths.project, JSON.stringify(project, null, 2));
-  });
 }
 
 export function createProjectsPost({ loadIngest, tempRoot }: ProjectsPostDeps) {
@@ -158,7 +131,7 @@ export function createProjectsPost({ loadIngest, tempRoot }: ProjectsPostDeps) {
             // start) and before temp cleanup; a failed copy surfaces as a
             // partial-success job so the GUI can open the project with a warning.
             try {
-              await persistUploadedSource(createdSlug, filename, tmpPath);
+              await persistProjectSource(createdSlug, filename, tmpPath);
             } catch (persistError) {
               throw new IngestPersistError(createdSlug, persistError);
             }

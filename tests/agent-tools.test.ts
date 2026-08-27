@@ -27,6 +27,8 @@ import {
 test("agentToolManifest includes query tools and registry mutations", () => {
   const names = agentToolNames("mcp");
   assert.ok(names.includes("list_projects"));
+  assert.ok(names.includes("url_ingest"));
+  assert.ok(names.includes("ingest_job_status"));
   assert.ok(names.includes("transcript_grep"));
   assert.ok(names.includes("project_status"));
   assert.ok(names.includes("cut"));
@@ -1570,17 +1572,14 @@ test("task_list actor filter matching nothing returns an empty array, not an err
 
 // ── moment_search: combined transcript + visual scene search ────────────────
 
-test("agentToolManifest includes moment_search with slug, query, and optional limit", () => {
+test("agentToolManifest includes member-aware moment_search", () => {
   const names = agentToolNames("mcp");
   assert.ok(names.includes("moment_search"));
 
   const manifest = agentToolManifest("mcp");
   const tool = manifest.find((m) => m.name === "moment_search");
   assert.ok(tool, "moment_search tool missing from manifest");
-  assert.match(
-    tool?.summary ?? "",
-    /first call may block while the visual index builds/i
-  );
+  assert.match(tool?.summary ?? "", /target-member face timeline/i);
 
   const schema = tool?.inputSchema as {
     properties?: Record<string, unknown>;
@@ -1589,7 +1588,33 @@ test("agentToolManifest includes moment_search with slug, query, and optional li
   assert.ok(schema.properties?.slug, "moment_search takes a slug");
   assert.ok(schema.properties?.query, "moment_search takes a query");
   assert.ok(schema.properties?.limit, "moment_search takes an optional limit");
+  assert.ok(
+    schema.properties?.memberProfileId,
+    "moment_search takes an optional member profile"
+  );
+  assert.ok(
+    schema.properties?.queryVariants,
+    "moment_search takes optional bilingual query variants"
+  );
   assert.deepEqual(schema.required?.sort(), ["query", "slug"]);
+});
+
+test("member_profile_create accepts three public reference image URLs", () => {
+  const manifest = agentToolManifest("mcp");
+  const tool = manifest.find((entry) => entry.name === "member_profile_create");
+  assert.ok(tool);
+  const parsed = getAgentTool("member_profile_create")?.schema.safeParse({
+    id: "member:nmixx:haewon",
+    displayName: "Haewon",
+    groupId: "nmixx",
+    referenceImageUrls: [
+      "https://example.com/a.jpg",
+      "https://example.com/b.jpg",
+      "https://example.com/c.jpg",
+    ],
+    negativeReferenceImageUrls: ["https://example.com/not-haewon.jpg"],
+  });
+  assert.equal(parsed?.success, true);
 });
 
 test("callAgentTool moment_search returns text matches without a visual index", async () => {

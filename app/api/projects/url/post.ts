@@ -1,37 +1,29 @@
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import {
   releaseIngestSlug,
   reserveIngestSlug,
   startIngestJob,
 } from "@engine/ingest-jobs";
-import { IngestPersistError } from "@engine/ingest-persist-error";
-import { projectPaths, slugFromVideo } from "@engine/paths";
+import { projectPaths } from "@engine/paths";
 import {
   downloadVideoFromUrl,
   UrlIngesterUnavailableError,
 } from "@engine/url-ingest";
+import {
+  ingestDownloadedUrlProject,
+  projectSlugFromUrl,
+  safeUrlDownloadErrorMessage,
+  sanitizeUrlProjectFilename,
+} from "@engine/url-project";
 import type { NextRequest } from "next/server";
 import type { IngestFn } from "../post.ts";
-import { persistUploadedSource } from "../post.ts";
 
 export interface UrlProjectsPostDeps {
   loadIngest: () => Promise<IngestFn>;
   tempRoot?: string;
-}
-
-function sanitizeFilename(name: string): string {
-  return name.replace(/[^\w.-]+/g, "_") || "video.mp4";
-}
-
-function safeDownloadErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  if (/HTTP(?: Error)? 403/i.test(message)) {
-    return "Could not download this video: the provider returned HTTP 403.";
-  }
-  return "Could not download this video URL. Check the URL and try again.";
 }
 
 export function createUrlProjectsPost({
@@ -46,48 +38,60 @@ export function createUrlProjectsPost({
     }
 
     const force = new URL(req.url).searchParams.get("force") === "1";
+    let slug: string;
+    try {
+      slug = projectSlugFromUrl(url);
+    } catch (error) {
+      return Response.json(
+        { error: (error as Error).message },
+        { status: 400 }
+      );
+    }
+    if (!reserveIngestSlug(slug)) {
+      return Response.json(
+        {
+          code: "in-flight",
+          error: `ingest already in progress for ${slug}`,
+        },
+        { status: 409 }
+      );
+    }
+    if (!force && existsSync(projectPaths(slug).project)) {
+      releaseIngestSlug(slug);
+      return Response.json(
+        {
+          code: "exists",
+          error: `project already exists: ${slug} (re-ingest would wipe it; confirm to overwrite)`,
+        },
+        { status: 409 }
+      );
+    }
+
     let tmpDir: string;
-    tmpDir = await mkdtemp(join(tempRoot ?? tmpdir(), "openklip-url-"));
+    try {
+      tmpDir = await mkdtemp(join(tempRoot ?? tmpdir(), "openklip-url-"));
+    } catch (error) {
+      releaseIngestSlug(slug);
+      throw error;
+    }
 
     let downloaded: string;
     try {
       downloaded = await downloadVideoFromUrl(url, tmpDir);
     } catch (error) {
       await rm(tmpDir, { recursive: true, force: true });
+      releaseIngestSlug(slug);
       if (error instanceof UrlIngesterUnavailableError) {
         return Response.json({ error: error.message }, { status: 503 });
       }
       return Response.json(
-        { error: safeDownloadErrorMessage(error) },
+        { error: safeUrlDownloadErrorMessage(error) },
         { status: 502 }
       );
     }
 
-    let slug = "";
     try {
-      const filename = sanitizeFilename(basename(downloaded));
-      slug = slugFromVideo(filename);
-
-      if (!reserveIngestSlug(slug)) {
-        return Response.json(
-          {
-            code: "in-flight",
-            error: `ingest already in progress for ${slug}`,
-          },
-          { status: 409 }
-        );
-      }
-      if (!force && existsSync(projectPaths(slug).project)) {
-        releaseIngestSlug(slug);
-        return Response.json(
-          {
-            code: "exists",
-            error: `project already exists: ${slug} (re-ingest would wipe it; confirm to overwrite)`,
-          },
-          { status: 409 }
-        );
-      }
-
+      const filename = sanitizeUrlProjectFilename(downloaded);
       const ingest = await loadIngest();
       const job = startIngestJob({
         filename,
@@ -96,17 +100,15 @@ export function createUrlProjectsPost({
         force,
         run: async (onProgress, signal) => {
           try {
-            const createdSlug = await ingest(downloaded, {
+            const result = await ingestDownloadedUrlProject({
+              downloadedPath: downloaded,
               force,
+              ingest,
               onProgress,
               signal,
+              slug,
             });
-            try {
-              await persistUploadedSource(createdSlug, filename, downloaded);
-            } catch (persistError) {
-              throw new IngestPersistError(createdSlug, persistError);
-            }
-            return createdSlug;
+            return result.slug;
           } finally {
             await rm(tmpDir, { recursive: true, force: true });
           }
@@ -114,9 +116,7 @@ export function createUrlProjectsPost({
       });
       return Response.json({ jobId: job.id, slug });
     } catch (error) {
-      if (slug) {
-        releaseIngestSlug(slug);
-      }
+      releaseIngestSlug(slug);
       await rm(tmpDir, { recursive: true, force: true });
       throw error;
     }

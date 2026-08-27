@@ -53,6 +53,10 @@ Time is integer audio samples at 48 kHz. The CLI takes seconds where a human num
 | --- | --- |
 | List projects | `openklip list` |
 | Ingest a video | `openklip ingest <video> [--force]` |
+| Ingest a video URL | Browser: New project → Import from URL; MCP: `url_ingest` with optional `memberProfileId`, then poll `ingest_job_status`; a reusable media index starts after project creation |
+| Create or list target-member profiles | MCP: `member_profile_create`, `member_profile_list`; include same-group or explicit hard-negative images when available |
+| Read or rebuild target-member media index | MCP: `media_index_status`, `media_index_rebuild`, `media_index_cancel` |
+| Find target-member appearance intervals | MCP: `member_appearance_search` |
 | Create blank canvas | `openklip ingest --blank [--slug] [--duration] [--aspect] [--fps] [--color] [--force]` (GUI: New project → Blank canvas; MCP: `blank_ingest`) |
 | Open editor (production) | `openklip serve [slug]` (production `next start`; needs a prior `bun run build`) |
 | Open editor (dev) | `openklip dev [slug]` (`next dev`: HMR, dev overlay, contributor use) |
@@ -61,7 +65,7 @@ Time is integer audio samples at 48 kHz. The CLI takes seconds where a human num
 | Read / write the project brief | `openklip brief <slug> [--set <text...> \| --file <path> \| --audit]` |
 | Read transcript (full) | `openklip transcript <slug>` |
 | Grep transcript | `openklip transcript grep`, `span`, `phrase` |
-| Search moments by transcript text or visual scene | `openklip search <slug> "query" [--json] [--limit N]` (MCP: `moment_search`) |
+| Search moments by transcript text or visual scene | `openklip search <slug> "query" [--json] [--limit N]`; MCP `moment_search` also accepts `memberProfileId` and up to two faithful query variants for face-timeline plus SigLIP2 scene intersection; load `target-moment-search` for Korean-first query construction |
 | Rebuild the visual moment search index | `openklip index <slug> [--force]` |
 | Review edit (JSON) | `openklip status <slug> --json`, `ranges`, `overlays` |
 | Cut / restore words | `openklip cut`, `openklip restore` |
@@ -252,6 +256,8 @@ Find moments in the source footage by transcript text or on-screen visual conten
 | --- | --- |
 | `openklip search <slug> "<query>" [--json] [--limit N]` | Search transcript text and visual scenes in one call. Text matches include cut words (marked `[cut]`); scene matches blend CLIP frame embeddings with scene-log summaries, gated by a measured score floor plus peak-relative pruning so wrong-topic queries return nothing instead of noise. `--limit` caps result count (1-100, default 24; MCP: `moment_search`, same input shape). |
 | `openklip index <slug> [--force]` | Build or rebuild the visual moment index (`working/moment-index.json`) by embedding existing ingest sample frames with a local CLIP model (`Xenova/clip-vit-base-patch32`, downloaded once like Whisper). `search` and `moment_search` build a missing or stale index automatically on first call; run this to force a rebuild or pre-warm it. |
+
+MCP target-member indexing is a separate reusable derived-media path. `member_profile_create` requires 3–40 verified positive local image paths or public HTTPS image URLs, accepts optional same-group or explicit hard-negative images, and stores only model-versioned profile data under the writable OpenKlip state directory. Without hard negatives, high face similarity remains `ambiguous` rather than confirming identity. Remote references reject credentials, private hosts, unsafe redirects, unsupported image types, and stream through a 20 MB cap. `url_ingest` accepts an optional `memberProfileId`; its durable job does not report success until `working/media-index.json` is complete. Face detection runs at 4 fps with quality filtering plus 10 fps refinement around shot cuts and uncertain or changing identity boundaries. Scene indexing runs SigLIP2 Base INT8 over whole frames, target-context crops, and target-medium crops. For Korean requests, load `target-moment-search`: retain the Korean original, add no more than two faithful English visual variants when useful, and inspect the per-query scores returned by member-aware `moment_search`. Use `media_index_status` to poll and `member_appearance_search` for identity intervals. Source, profile, or model changes make an index stale or remove it. The derived vectors never enter `project.json`, action history, or MCP profile output.
 
 Workflow: ingest runs indexing as a non-fatal phase (a failed or missing index degrades to text-only results, never blocks ingest); older projects backfill lazily on first search. GUI: the fourth left-rail sidebar tab, **Search** (`Mod+Shift+F`), shows text and scene results as thumbnail cards with timestamps. Click a card to seek; drag it onto the preview, transcript, or open timeline drawer, or use its hover **Keep** button, to restore any cut words in that span (a logged, revertible `cut` action).
 
@@ -683,3 +689,13 @@ Durable, non-obvious notes for cloud agents. The startup update script already r
 
 - Bun's `mock.module` leaks across test files in a shared-process run (historically 6 `syncAssetsFromFolder` failures via `tests/project-data.test.ts`; later ffmpeg-stub leakage from `tests/cams.test.ts` broke assembly/export smoke tests in the gate). Fixed structurally on 2026-07-12: the `test` script and local CI run `bun test --isolate` (fresh global object per test file, ~6s overhead on a ~38s suite). If you invoke `bun test` directly without `--isolate`, cross-file mock leakage can still produce phantom failures - use `bun run test`.
 - Model downloads used to make the gate hostage to huggingface.co uptime: the cam acceptance tests (`tests/cam-devex-smoke.test.ts`, `tests/multicam-acceptance.test.ts`) run the ingest pipeline including Whisper transcription, which re-fetched the model from HF every run and failed on any gateway timeout. Fixed 2026-07-16 (CRAFT-6243): local CI persists the Transformers.js download cache (`OPENKLIP_MODEL_CACHE`), warms it once via `node scripts/warm-models.mjs`, then runs the transcription/embedding steps with `TRANSFORMERS_OFFLINE=1` so they load Whisper/CLIP from the warmed cache and never touch the network. `src/model-env.mjs` also retries transient HF errors with backoff. Running the suite offline locally: `OPENKLIP_MODEL_CACHE=<dir> node scripts/warm-models.mjs` once, then `OPENKLIP_MODEL_CACHE=<dir> TRANSFORMERS_OFFLINE=1 bun run test`.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes: APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev`; verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

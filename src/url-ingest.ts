@@ -1,7 +1,7 @@
 // URL ingester runner: download remote video with yt-dlp (manifest in
 // ingesters/url/), then hand the file to the normal ingest path.
 import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, extname, join } from "node:path";
 import { run } from "./ffmpeg.ts";
 import { loadIngesters, resolveIngesterArgv } from "./ingesters.ts";
 import {
@@ -17,7 +17,21 @@ export class UrlIngesterUnavailableError extends Error {
 }
 
 function commandOnPath(command: string): boolean {
-  return Bun.which(command) !== null;
+  const pathEntries = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+  const extensions =
+    process.platform === "win32" && !extname(command)
+      ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
+          .split(";")
+          .filter(Boolean)
+      : [""];
+  for (const directory of pathEntries) {
+    for (const extension of extensions) {
+      if (existsSync(join(directory, `${command}${extension}`))) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function pickDownloadedVideo(tmpDir: string): string {
@@ -41,7 +55,8 @@ function pickDownloadedVideo(tmpDir: string): string {
 /** Download a remote video to tmpDir; returns the absolute path to the file. */
 export async function downloadVideoFromUrl(
   url: string,
-  tmpDir: string
+  tmpDir: string,
+  signal?: AbortSignal
 ): Promise<string> {
   const trimmed = url.trim();
   if (!trimmed) {
@@ -62,7 +77,7 @@ export async function downloadVideoFromUrl(
   const outputTemplate = join(tmpDir, "download.%(ext)s");
   const argv = resolveIngesterArgv(manifest, { url: trimmed }, outputTemplate);
   const [command, ...args] = argv;
-  await run(command, args, "yt-dlp");
+  await run(command, args, "yt-dlp", signal);
   const downloaded = pickDownloadedVideo(tmpDir);
   if (!isSupportedVideoFilename(downloaded)) {
     throw new Error(unsupportedVideoMessage(downloaded));
