@@ -27,6 +27,26 @@ test("loadIngesters discovers bundled manifests", async () => {
   assert.ok(list.some((m) => m.id === "url"));
 });
 
+test("bundled URL ingester uses the web embedded YouTube client", async () => {
+  const list = await loadIngesters();
+  const manifest = list.find((entry) => entry.id === "url");
+  assert.ok(manifest);
+
+  const argv = resolveIngesterArgv(
+    manifest,
+    { url: "https://youtu.be/example" },
+    "/tmp/out.mp4"
+  );
+  assert.deepEqual(argv, [
+    "yt-dlp",
+    "--extractor-args",
+    "youtube:player_client=web_embedded",
+    "https://youtu.be/example",
+    "-o",
+    "/tmp/out.mp4",
+  ]);
+});
+
 test("resolveIngesterArgv substitutes field and {output} placeholders", () => {
   const m = IngesterSchema.parse(URL_INGESTER);
   const argv = resolveIngesterArgv(

@@ -16,13 +16,8 @@ export class UrlIngesterUnavailableError extends Error {
   }
 }
 
-async function commandOnPath(command: string): Promise<boolean> {
-  const proc = Bun.spawn(["which", command], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const code = await proc.exited;
-  return code === 0;
+function commandOnPath(command: string): boolean {
+  return Bun.which(command) !== null;
 }
 
 function pickDownloadedVideo(tmpDir: string): string {
@@ -59,7 +54,7 @@ export async function downloadVideoFromUrl(
       "URL ingester manifest missing (ingesters/url/ingester.json)."
     );
   }
-  if (!(await commandOnPath(manifest.command))) {
+  if (!commandOnPath(manifest.command)) {
     throw new UrlIngesterUnavailableError(
       `${manifest.command} is not on PATH. Install yt-dlp to import from URLs.`
     );

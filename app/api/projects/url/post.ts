@@ -26,6 +26,14 @@ function sanitizeFilename(name: string): string {
   return name.replace(/[^\w.-]+/g, "_") || "video.mp4";
 }
 
+function safeDownloadErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/HTTP(?: Error)? 403/i.test(message)) {
+    return "Could not download this video: the provider returned HTTP 403.";
+  }
+  return "Could not download this video URL. Check the URL and try again.";
+}
+
 export function createUrlProjectsPost({
   loadIngest,
   tempRoot,
@@ -41,9 +49,22 @@ export function createUrlProjectsPost({
     let tmpDir: string;
     tmpDir = await mkdtemp(join(tempRoot ?? tmpdir(), "openklip-url-"));
 
+    let downloaded: string;
+    try {
+      downloaded = await downloadVideoFromUrl(url, tmpDir);
+    } catch (error) {
+      await rm(tmpDir, { recursive: true, force: true });
+      if (error instanceof UrlIngesterUnavailableError) {
+        return Response.json({ error: error.message }, { status: 503 });
+      }
+      return Response.json(
+        { error: safeDownloadErrorMessage(error) },
+        { status: 502 }
+      );
+    }
+
     let slug = "";
     try {
-      const downloaded = await downloadVideoFromUrl(url, tmpDir);
       const filename = sanitizeFilename(basename(downloaded));
       slug = slugFromVideo(filename);
 
@@ -97,9 +118,6 @@ export function createUrlProjectsPost({
         releaseIngestSlug(slug);
       }
       await rm(tmpDir, { recursive: true, force: true });
-      if (error instanceof UrlIngesterUnavailableError) {
-        return Response.json({ error: error.message }, { status: 503 });
-      }
       throw error;
     }
   };
